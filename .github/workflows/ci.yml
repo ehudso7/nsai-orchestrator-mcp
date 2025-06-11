@@ -1,0 +1,391 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # Backend Testing and Linting
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/password
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p password 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 7474:7474
+          - 7687:7687
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov bandit safety
+
+    - name: Run security checks
+      run: |
+        # Check for known security vulnerabilities
+        safety check --json || true
+        
+        # Run bandit security linter
+        bandit -r . -f json -o bandit-report.json || true
+
+    - name: Run linting
+      run: |
+        # Run flake8 linting
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run black formatting check
+      run: |
+        black --check --diff .
+
+    - name: Run type checking
+      run: |
+        # Install mypy if not already present
+        pip install mypy types-redis types-requests
+        mypy . --ignore-missing-imports || true
+
+    - name: Set environment variables for tests
+      run: |
+        echo "SECRET_KEY=test-secret-key-for-ci" >> $GITHUB_ENV
+        echo "JWT_SECRET=test-jwt-secret-for-ci" >> $GITHUB_ENV
+        echo "ANTHROPIC_API_KEY=test-key" >> $GITHUB_ENV
+        echo "OPENAI_API_KEY=test-key" >> $GITHUB_ENV
+        echo "REDIS_HOST=localhost" >> $GITHUB_ENV
+        echo "NEO4J_URI=bolt://localhost:7687" >> $GITHUB_ENV
+        echo "NEO4J_USER=neo4j" >> $GITHUB_ENV
+        echo "NEO4J_PASSWORD=password" >> $GITHUB_ENV
+
+    - name: Run tests
+      run: |
+        pytest --cov=. --cov-report=xml --cov-report=html --cov-fail-under=80
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+
+    - name: Archive test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: backend-test-results
+        path: |
+          htmlcov/
+          bandit-report.json
+          pytest-report.xml
+
+  # Frontend Testing and Linting
+  frontend-test:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: |
+        npm run lint
+        npm run type-check
+
+    - name: Run tests
+      run: npm run test:coverage
+
+    - name: Build application
+      run: npm run build
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-build
+        path: frontend/.next/
+
+  # Security Scan
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Docker Build and Push
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Deploy to Staging
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment"
+        # Add your staging deployment logic here
+        # This could be:
+        # - AWS ECS deployment
+        # - Kubernetes deployment
+        # - Docker Compose on staging server
+        # - Render/Railway/Vercel deployment
+
+  # Deploy to Production
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production environment"
+        # Add your production deployment logic here
+
+  # Performance Testing
+  performance-test:
+    runs-on: ubuntu-latest
+    needs: [backend-test]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install locust requests
+
+    - name: Run performance tests
+      run: |
+        # Create simple locust test
+        cat > locustfile.py << 'EOF'
+        from locust import HttpUser, task, between
+        
+        class MCPUser(HttpUser):
+            wait_time = between(1, 3)
+            
+            def on_start(self):
+                self.client.headers.update({"X-API-Key": "nsai_test_key"})
+            
+            @task
+            def test_health(self):
+                self.client.get("/health")
+            
+            @task
+            def test_status(self):
+                self.client.get("/")
+        EOF
+        
+        # Run locust in headless mode for 30 seconds
+        locust --headless --users 10 --spawn-rate 2 -H http://localhost:4141 --run-time 30s --html performance-report.html || true
+
+    - name: Archive performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-results
+        path: performance-report.html
+
+  # Documentation Build
+  docs-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install documentation dependencies
+      run: |
+        pip install mkdocs mkdocs-material mkdocstrings[python]
+
+    - name: Build documentation
+      run: |
+        # Create basic mkdocs.yml if it doesn't exist
+        if [ ! -f mkdocs.yml ]; then
+          cat > mkdocs.yml << 'EOF'
+        site_name: NSAI Orchestrator MCP
+        site_description: Production-grade multi-agent orchestration platform
+        
+        theme:
+          name: material
+          palette:
+            - scheme: default
+              primary: blue
+              accent: blue
+        
+        nav:
+          - Home: index.md
+          - API Reference: api.md
+          - Deployment: deployment.md
+        
+        plugins:
+          - mkdocstrings
+        EOF
+        fi
+        
+        # Create docs directory if it doesn't exist
+        mkdir -p docs
+        
+        # Generate API documentation
+        echo "# NSAI Orchestrator MCP" > docs/index.md
+        echo "Production-grade multi-agent orchestration platform" >> docs/index.md
+        
+        mkdocs build
+
+    - name: Deploy documentation
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site
+
+  # Vercel Deployment (Optional - requires VERCEL_TOKEN secret)
+  deploy-vercel:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.VERCEL_TOKEN != ''
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Vercel CLI
+      run: npm install --global vercel@latest
+    
+    - name: Pull Vercel Environment Information
+      run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      env:
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    
+    - name: Build Project Artifacts
+      run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+    
+    - name: Deploy Project Artifacts to Vercel
+      run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

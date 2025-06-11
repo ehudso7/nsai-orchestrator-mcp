@@ -1,0 +1,424 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation-name: enter;
+    animation-duration: var(--animate-enter-duration, 0.15s);
+    animation-timing-function: var(--animate-enter-timing, ease);
+    animation-fill-mode: both;
+  }
+
+  .animate-out {
+    animation-name: exit;
+    animation-duration: var(--animate-exit-duration, 0.15s);
+    animation-timing-function: var(--animate-exit-timing, ease);
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    --animate-enter-timing: ease-out;
+    animation-name: fade-in;
+  }
+
+  .fade-out {
+    --animate-exit-timing: ease-in;
+    animation-name: fade-out;
+  }
+
+  .slide-in-from-top {
+    --animate-enter-timing: ease-out;
+    animation-name: slide-in-from-top;
+  }
+
+  .slide-in-from-bottom {
+    --animate-enter-timing: ease-out;
+    animation-name: slide-in-from-bottom;
+  }
+
+  .slide-in-from-left {
+    --animate-enter-timing: ease-out;
+    animation-name: slide-in-from-left;
+  }
+
+  .slide-in-from-right {
+    --animate-enter-timing: ease-out;
+    animation-name: slide-in-from-right;
+  }
+
+  .slide-out-to-top {
+    --animate-exit-timing: ease-in;
+    animation-name: slide-out-to-top;
+  }
+
+  .slide-out-to-bottom {
+    --animate-exit-timing: ease-in;
+    animation-name: slide-out-to-bottom;
+  }
+
+  .slide-out-to-left {
+    --animate-exit-timing: ease-in;
+    animation-name: slide-out-to-left;
+  }
+
+  .slide-out-to-right {
+    --animate-exit-timing: ease-in;
+    animation-name: slide-out-to-right;
+  }
+
+  .zoom-in {
+    --animate-enter-timing: ease-out;
+    animation-name: zoom-in;
+  }
+
+  .zoom-out {
+    --animate-exit-timing: ease-in;
+    animation-name: zoom-out;
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--animate-enter-translate-y, 0), 0)
+      scale3d(var(--animate-enter-scale, 1), var(--animate-enter-scale, 1), 1);
+  }
+}
+
+@keyframes exit {
+  to {
+    opacity: 0;
+    transform: translate3d(0, var(--animate-exit-translate-y, 0), 0)
+      scale3d(var(--animate-exit-scale, 1), var(--animate-exit-scale, 1), 1);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-out-to-top {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes slide-out-to-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes slide-out-to-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes slide-out-to-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes zoom-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* Custom scrollbar styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full border-2 border-gray-200 border-t-blue-600;
+  width: 1rem;
+  height: 1rem;
+}
+
+.spinner-lg {
+  @apply animate-spin rounded-full border-4 border-gray-200 border-t-blue-600;
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply inline-block w-2 h-2 rounded-full;
+}
+
+.status-dot.success {
+  @apply bg-green-500;
+}
+
+.status-dot.error {
+  @apply bg-red-500;
+}
+
+.status-dot.warning {
+  @apply bg-yellow-500;
+}
+
+.status-dot.info {
+  @apply bg-blue-500;
+}
+
+.status-dot.pending {
+  @apply bg-gray-400 animate-pulse;
+}
+
+/* Memory graph styles */
+.memory-graph {
+  @apply w-full h-full bg-gray-50 rounded-lg border;
+}
+
+.memory-graph .cy-canvas {
+  @apply rounded-lg;
+}
+
+/* Agent status styles */
+.agent-card {
+  @apply bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow;
+}
+
+.agent-card.active {
+  @apply border-green-200 bg-green-50;
+}
+
+.agent-card.inactive {
+  @apply border-gray-200 bg-gray-50;
+}
+
+.agent-card.error {
+  @apply border-red-200 bg-red-50;
+}
+
+/* Task item styles */
+.task-item {
+  @apply flex items-center justify-between p-4 bg-white rounded-lg border hover:bg-gray-50 transition-colors;
+}
+
+.task-item.running {
+  @apply border-blue-200 bg-blue-50;
+}
+
+.task-item.completed {
+  @apply border-green-200 bg-green-50;
+}
+
+.task-item.failed {
+  @apply border-red-200 bg-red-50;
+}
+
+.task-item.cancelled {
+  @apply border-gray-200 bg-gray-50;
+}
+
+/* Code block styles */
+.code-block {
+  @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono;
+}
+
+.code-block .line-number {
+  @apply text-gray-500 mr-4 select-none;
+}
+
+/* Metrics chart styles */
+.metrics-chart {
+  @apply w-full h-64 bg-white rounded-lg border p-4;
+}
+
+/* Toast styles */
+.toast {
+  @apply fixed bottom-4 right-4 bg-white border rounded-lg shadow-lg p-4 max-w-sm z-50;
+}
+
+.toast.success {
+  @apply border-green-200 bg-green-50;
+}
+
+.toast.error {
+  @apply border-red-200 bg-red-50;
+}
+
+.toast.warning {
+  @apply border-yellow-200 bg-yellow-50;
+}
+
+.toast.info {
+  @apply border-blue-200 bg-blue-50;
+}
+
+/* Responsive grid */
+.grid-responsive {
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Focus styles for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+/* Animation delays for staggered effects */
+.animate-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animate-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animate-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animate-delay-500 {
+  animation-delay: 500ms;
+}

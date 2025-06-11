@@ -1,0 +1,500 @@
+name: Elite CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  release:
+    types: [created]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Run Snyk security scan
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+      
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+
+  # Code quality checks
+  quality-checks:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black isort flake8 mypy pylint bandit coverage pytest-cov
+      
+      - name: Run Black formatter
+        run: black --check .
+      
+      - name: Run isort
+        run: isort --check-only .
+      
+      - name: Run Flake8
+        run: flake8 . --count --max-line-length=100 --statistics
+      
+      - name: Run mypy
+        run: mypy . --ignore-missing-imports
+      
+      - name: Run Pylint
+        run: pylint **/*.py --fail-under=9.0
+      
+      - name: Run Bandit security linter
+        run: bandit -r . -f json -o bandit-report.json
+
+  # Unit and integration tests
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: [security-scan, quality-checks]
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-xdist hypothesis locust
+      
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-fail-under=95
+        env:
+          REDIS_URL: redis://localhost:6379
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+      
+      - name: Run chaos engineering tests
+        run: |
+          pytest tests/elite_tests.py::TestEliteOrchestrator::test_chaos_resilience -v
+      
+      - name: Run property-based tests
+        run: |
+          pytest tests/ -v --hypothesis-show-statistics
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: backend
+          fail_ci_if_error: true
+
+  # Frontend tests
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: [security-scan, quality-checks]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: npm run lint
+      
+      - name: Run TypeScript checks
+        working-directory: ./frontend
+        run: npm run typecheck
+      
+      - name: Run unit tests
+        working-directory: ./frontend
+        run: npm run test:unit -- --coverage
+      
+      - name: Run E2E tests
+        working-directory: ./frontend
+        run: |
+          npm run build
+          npm run test:e2e
+      
+      - name: Run accessibility tests
+        working-directory: ./frontend
+        run: npm run test:a11y
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          fail_ci_if_error: true
+
+  # Performance testing
+  performance-test:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Locust
+        run: pip install locust
+      
+      - name: Run load tests
+        run: |
+          locust -f tests/elite_tests.py EliteLoadTest \
+            --headless \
+            --users 1000 \
+            --spawn-rate 50 \
+            --run-time 5m \
+            --host http://localhost:8000 \
+            --html performance-report.html
+      
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.html
+      
+      - name: Check performance thresholds
+        run: |
+          python scripts/check_performance_thresholds.py performance-report.html
+
+  # Build and push Docker images
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+      
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-backend
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-frontend
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Run container structure tests
+        run: |
+          container-structure-test test \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-backend \
+            --config container-tests.yaml
+
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-images, performance-test]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.nsai-orchestrator.com
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Kubernetes (Blue-Green)
+        run: |
+          # Blue-Green deployment script
+          kubectl apply -f k8s/staging/
+          kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-backend
+          kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-frontend
+          
+          # Wait for rollout
+          kubectl rollout status deployment/backend
+          kubectl rollout status deployment/frontend
+          
+          # Run smoke tests
+          ./scripts/smoke-tests.sh staging
+          
+          # Switch traffic to new version
+          kubectl patch service backend -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service frontend -p '{"spec":{"selector":{"version":"green"}}}'
+      
+      - name: Run E2E tests against staging
+        run: |
+          npm run test:e2e -- --baseUrl=https://staging.nsai-orchestrator.com
+      
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Staging deployment completed'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-images, deploy-staging]
+    if: github.event_name == 'release'
+    environment:
+      name: production
+      url: https://nsai-orchestrator.com
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Kubernetes (Canary)
+        run: |
+          # Canary deployment - 10% traffic initially
+          kubectl apply -f k8s/production/
+          kubectl set image deployment/backend-canary backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-backend
+          kubectl set image deployment/frontend-canary frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-frontend
+          
+          # Configure traffic split
+          kubectl apply -f - <<EOF
+          apiVersion: networking.istio.io/v1beta1
+          kind: VirtualService
+          metadata:
+            name: backend-vs
+          spec:
+            http:
+            - match:
+              - headers:
+                  canary:
+                    exact: "true"
+              route:
+              - destination:
+                  host: backend-canary
+                weight: 100
+            - route:
+              - destination:
+                  host: backend
+                weight: 90
+              - destination:
+                  host: backend-canary
+                weight: 10
+          EOF
+          
+          # Monitor canary metrics
+          ./scripts/monitor-canary.sh
+          
+          # Gradually increase traffic
+          for weight in 25 50 75 100; do
+            kubectl patch virtualservice backend-vs --type merge -p "{\"spec\":{\"http\":[{\"route\":[{\"destination\":{\"host\":\"backend\"},\"weight\":$((100-weight))},{\"destination\":{\"host\":\"backend-canary\"},\"weight\":${weight}}]}]}}"
+            sleep 300  # 5 minutes between increases
+            ./scripts/check-slos.sh || exit 1
+          done
+          
+          # Promote canary to stable
+          kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-backend
+          kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-images.outputs.version }}-frontend
+      
+      - name: Update DNS and CDN
+        run: |
+          # Update Cloudflare DNS
+          curl -X PUT "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/dns_records/${{ secrets.CF_RECORD_ID }}" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"type":"A","name":"nsai-orchestrator.com","content":"${{ secrets.PROD_IP }}","ttl":1}'
+          
+          # Purge CDN cache
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+      
+      - name: Create rollback plan
+        run: |
+          # Save current version for rollback
+          echo "${{ needs.build-images.outputs.version }}" > rollback-version.txt
+          kubectl create configmap rollback-version --from-file=rollback-version.txt
+      
+      - name: Notify team
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Production deployment completed - Version ${{ needs.build-images.outputs.version }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Post-deployment monitoring
+  post-deployment:
+    name: Post-Deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run synthetic monitoring
+        run: |
+          # Run Datadog synthetic tests
+          curl -X POST "https://api.datadoghq.com/api/v1/synthetics/tests/trigger" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
+            -H "DD-APPLICATION-KEY: ${{ secrets.DD_APP_KEY }}" \
+            -d '{"tests": [{"public_id": "${{ secrets.DD_SYNTHETIC_TEST_ID }}"}]}'
+      
+      - name: Check error rates
+        run: |
+          # Monitor error rates for 30 minutes
+          ./scripts/monitor-errors.sh 30m
+      
+      - name: Generate deployment report
+        run: |
+          python scripts/generate_deployment_report.py \
+            --version ${{ needs.build-images.outputs.version }} \
+            --environment production \
+            --output deployment-report.html
+      
+      - name: Upload deployment report
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-report
+          path: deployment-report.html
+
+  # Rollback job (manual trigger)
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get rollback version
+        run: |
+          kubectl get configmap rollback-version -o jsonpath='{.data.rollback-version\.txt}' > rollback-version.txt
+          echo "ROLLBACK_VERSION=$(cat rollback-version.txt)" >> $GITHUB_ENV
+      
+      - name: Execute rollback
+        run: |
+          kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.ROLLBACK_VERSION }}-backend
+          kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.ROLLBACK_VERSION }}-frontend
+          
+          kubectl rollout status deployment/backend
+          kubectl rollout status deployment/frontend
+      
+      - name: Verify rollback
+        run: |
+          ./scripts/smoke-tests.sh production
+          ./scripts/check-slos.sh
+      
+      - name: Notify team
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'ROLLBACK completed to version ${{ env.ROLLBACK_VERSION }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          color: warning

@@ -1,0 +1,66 @@
+MIT License
+
+Copyright (c) 2024 NSAI Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Additional Terms:
+
+1. Data Processing and Privacy:
+   - The Software may process user data and AI-generated content. Users are
+     responsible for ensuring compliance with applicable data protection laws
+     including but not limited to GDPR, CCPA, and HIPAA.
+   - No personal data is collected or transmitted by the Software itself unless
+     explicitly configured by the user.
+   - Users must obtain appropriate consent for any data processing activities.
+
+2. AI and LLM Usage:
+   - The Software integrates with third-party AI services (Anthropic Claude,
+     OpenAI, etc.). Users are responsible for compliance with the terms of
+     service of these third-party providers.
+   - Users must ensure that AI-generated content is used responsibly and
+     ethically.
+   - The Software does not guarantee the accuracy, reliability, or safety of
+     AI-generated content.
+
+3. Security and Production Use:
+   - Users are responsible for implementing appropriate security measures
+     when deploying the Software in production environments.
+   - Default configurations are intended for development use and must be
+     hardened for production deployment.
+   - Users should regularly update dependencies and monitor for security
+     vulnerabilities.
+
+4. Compliance and Regulation:
+   - Users are responsible for ensuring compliance with all applicable laws,
+     regulations, and industry standards in their jurisdiction.
+   - The Software is not certified for use in regulated industries (healthcare,
+     finance, etc.) without additional compliance measures implemented by the user.
+
+5. Limitation of Liability:
+   - The Software is provided for general use and is not intended for use in
+     life-critical, safety-critical, or mission-critical applications.
+   - Users assume all risks associated with the use of AI and automated systems.
+
+6. Export Control:
+   - The Software may be subject to export control laws and regulations. Users
+     are responsible for compliance with applicable export control requirements.
+
+For questions regarding this license or compliance requirements, please contact:
+legal@nsai.dev

@@ -1,0 +1,89 @@
+# Vercel Ignore - Files and directories to exclude from Vercel deployment
+
+# Backend files (not needed for frontend deployment)
+agents/
+memory/
+utils/
+core/
+tests/
+*.py
+requirements.txt
+Dockerfile
+docker-compose*.yml
+main.py
+main_enhanced.py
+mcp_server*.py
+config.py
+schemas.py
+
+# Infrastructure files
+deploy/
+k8s/
+kubernetes/
+terraform/
+
+# Development files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite*
+dump.rdb
+
+# Cache directories
+__pycache__/
+.pytest_cache/
+node_modules/.cache/
+
+# Documentation build
+docs/_build/
+site/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files outside frontend
+test_*.py
+check_*.py
+
+# Rules and prompt files
+rules/
+prompt.md
+project.md
+context.md
+capabilities.md
+
+# CLI tools
+cli/
+
+# Git files
+.git/
+.gitignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Large files that shouldn't be deployed
+*.tar.gz
+*.zip
+*.rar

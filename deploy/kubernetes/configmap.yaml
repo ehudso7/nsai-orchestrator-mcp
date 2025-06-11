@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nsai-orchestrator-config
+  namespace: nsai-orchestrator
+  labels:
+    app.kubernetes.io/name: nsai-orchestrator
+    app.kubernetes.io/component: configmap
+data:
+  # Application Configuration
+  APP_NAME: "NSAI Orchestrator MCP"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  HOST: "0.0.0.0"
+  PORT: "4141"
+  
+  # Logging
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Database Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  NEO4J_URI: "bolt://neo4j-service:7687"
+  NEO4J_USER: "neo4j"
+  
+  # Rate Limiting
+  RATE_LIMIT_PER_MINUTE: "60"
+  RATE_LIMIT_BURST: "100"
+  
+  # Memory Settings
+  MEMORY_TTL_SECONDS: "3600"
+  MEMORY_MAX_ENTRIES: "10000"
+  
+  # WebSocket Settings
+  WEBSOCKET_PING_INTERVAL: "20"
+  WEBSOCKET_PING_TIMEOUT: "10"
+  
+  # Performance
+  ENABLE_GZIP: "true"
+  MAX_REQUEST_SIZE: "16777216"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: nsai-orchestrator
+  labels:
+    app.kubernetes.io/name: nsai-orchestrator
+    app.kubernetes.io/component: nginx-config
+data:
+  nginx.conf: |
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+        use epoll;
+        multi_accept on;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        # Logging
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log /var/log/nginx/access.log main;
+
+        # Performance
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+
+        # Gzip
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+
+        # Upstream backends
+        upstream backend {
+            server backend-service:4141 max_fails=3 fail_timeout=30s;
+        }
+
+        upstream frontend {
+            server frontend-service:3000 max_fails=3 fail_timeout=30s;
+        }
+
+        # Main server block
+        server {
+            listen 80;
+            server_name _;
+
+            # Security headers
+            add_header X-Frame-Options DENY;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+            # Health check endpoint
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            # API routes
+            location /api/ {
+                limit_req zone=api burst=20 nodelay;
+                
+                proxy_pass http://backend/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # WebSocket support
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                
+                # Timeouts
+                proxy_connect_timeout 60s;
+                proxy_send_timeout 60s;
+                proxy_read_timeout 60s;
+            }
+
+            # WebSocket routes
+            location /ws/ {
+                proxy_pass http://backend/ws/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # WebSocket specific timeouts
+                proxy_read_timeout 3600s;
+                proxy_send_timeout 3600s;
+            }
+
+            # Frontend routes
+            location / {
+                proxy_pass http://frontend/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # Cache static assets
+                location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+                    expires 1y;
+                    add_header Cache-Control "public, immutable";
+                }
+            }
+        }
+    }
