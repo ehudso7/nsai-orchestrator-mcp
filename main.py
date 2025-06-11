@@ -34,8 +34,13 @@ async def execute_codex(request: dict):
     """Execute Codex agent for code generation."""
     task = request.get("task", "Generate code")
     # Mock response for now
+    result = f"// Codex Agent Response\n// Task: {task}\n\n"
+    result += "function generateAPIClient() {\n"
+    result += "  // Generated code would appear here\n"
+    result += "  console.log('API client initialized');\n"
+    result += "}"
     return {
-        "result": f"// Codex Agent Response\n// Task: {task}\n\nfunction generateAPIClient() {\n  // Generated code would appear here\n  console.log('API client initialized');\n}",
+        "result": result,
         "status": "success",
         "agent": "codex"
     }
@@ -45,8 +50,14 @@ async def analyze_claude(request: dict):
     """Execute Claude agent for analysis."""
     task = request.get("task", "Analyze system")
     # Mock response for now
+    result = f"Claude Analysis:\n\nTask: {task}\n\n"
+    result += "System Status:\n"
+    result += "- All services operational\n"
+    result += "- Memory usage: Normal\n"
+    result += "- Performance: Optimal\n"
+    result += "- No issues detected"
     return {
-        "result": f"Claude Analysis:\n\nTask: {task}\n\nSystem Status:\n- All services operational\n- Memory usage: Normal\n- Performance: Optimal\n- No issues detected",
+        "result": result,
         "status": "success",
         "agent": "claude"
     }
