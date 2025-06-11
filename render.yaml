@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: nsai-orchestrator-api
+    runtime: docker
+    repo: https://github.com/ehudso7/nsai-orchestrator-mcp
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: REDIS_URL
+        fromDatabase:
+          name: redis
+          property: connectionString
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USERNAME
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEY
+        generateValue: true
+
+databases:
+  - name: redis
+    type: redis
+    ipAllowList: []
