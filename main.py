@@ -25,5 +25,9 @@ async def route_rpc(payload: dict):
 def root():
     return {"status": "MCP orchestrator running"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "NSAI Orchestrator MCP"}
+
 # Run with:
 # uvicorn main:app --reload --port 4141

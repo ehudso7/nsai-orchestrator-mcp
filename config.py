@@ -2,15 +2,16 @@
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic_settings import BaseSettings
+from pydantic import Field, validator
 from pathlib import Path
 
 
 class SecuritySettings(BaseSettings):
     """Security configuration."""
     
-    secret_key: str = Field(..., env="SECRET_KEY")
-    jwt_secret: str = Field(..., env="JWT_SECRET")
+    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
+    jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=30, env="JWT_EXPIRE_MINUTES")
     bcrypt_rounds: int = Field(default=12, env="BCRYPT_ROUNDS")
@@ -42,10 +43,10 @@ class DatabaseSettings(BaseSettings):
     redis_db: int = Field(default=0, env="REDIS_DB")
     redis_max_connections: int = Field(default=20, env="REDIS_MAX_CONNECTIONS")
     
-    # Neo4j
-    neo4j_uri: str = Field(default="bolt://neo4j:7687", env="NEO4J_URI")
-    neo4j_user: str = Field(default="neo4j", env="NEO4J_USER")
-    neo4j_password: str = Field(default="password", env="NEO4J_PASSWORD")
+    # Neo4j (optional)
+    neo4j_uri: Optional[str] = Field(default=None, env="NEO4J_URI")
+    neo4j_user: Optional[str] = Field(default=None, env="NEO4J_USER")
+    neo4j_password: Optional[str] = Field(default=None, env="NEO4J_PASSWORD")
     neo4j_max_connection_lifetime: int = Field(default=300, env="NEO4J_MAX_CONNECTION_LIFETIME")
     neo4j_max_connection_pool_size: int = Field(default=50, env="NEO4J_MAX_CONNECTION_POOL_SIZE")
 
@@ -53,9 +54,9 @@ class DatabaseSettings(BaseSettings):
 class APISettings(BaseSettings):
     """API service configuration."""
     
-    # LLM APIs
-    anthropic_api_key: str = Field(..., env="ANTHROPIC_API_KEY")
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    # LLM APIs (optional for demo)
+    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     
     # API behavior
     default_timeout: int = Field(default=30, env="DEFAULT_TIMEOUT")
@@ -80,7 +81,7 @@ class AppSettings(BaseSettings):
     
     # Server
     host: str = Field(default="0.0.0.0", env="HOST")
-    port: int = Field(default=4141, env="PORT")
+    port: int = Field(default=8000, env="PORT")
     workers: int = Field(default=1, env="WORKERS")
     
     # Logging
