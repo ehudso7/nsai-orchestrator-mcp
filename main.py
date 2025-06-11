@@ -29,5 +29,27 @@ def root():
 def health_check():
     return {"status": "healthy", "service": "NSAI Orchestrator MCP"}
 
+@app.post("/api/agents/codex/execute")
+async def execute_codex(request: dict):
+    """Execute Codex agent for code generation."""
+    task = request.get("task", "Generate code")
+    # Mock response for now
+    return {
+        "result": f"// Codex Agent Response\n// Task: {task}\n\nfunction generateAPIClient() {\n  // Generated code would appear here\n  console.log('API client initialized');\n}",
+        "status": "success",
+        "agent": "codex"
+    }
+
+@app.post("/api/agents/claude/analyze")
+async def analyze_claude(request: dict):
+    """Execute Claude agent for analysis."""
+    task = request.get("task", "Analyze system")
+    # Mock response for now
+    return {
+        "result": f"Claude Analysis:\n\nTask: {task}\n\nSystem Status:\n- All services operational\n- Memory usage: Normal\n- Performance: Optimal\n- No issues detected",
+        "status": "success",
+        "agent": "claude"
+    }
+
 # Run with:
-# uvicorn main:app --reload --port 4141
+# uvicorn main:app --reload --port 8000
