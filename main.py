@@ -1,7 +1,7 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from mcp_server import MCPServer
-from typing import List
+from typing import List, Optional
 import json
 import asyncio
 from datetime import datetime, timedelta
