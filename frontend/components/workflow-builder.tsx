@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiClient } from "@/lib/api-client";
 import {
   Brain,
   Code,
@@ -34,14 +35,18 @@ import {
   Network,
   Activity,
   Minus,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useHotkeys } from "react-hotkeys-hook";
 
+// Import advanced node types
+import { advancedNodeTypes, createNode as createAdvancedNode } from "./workflow-nodes";
+
 // Node types for the workflow
-type NodeType = "agent" | "condition" | "parallel" | "merge" | "transform" | "trigger" | "output";
+type NodeType = "agent" | "condition" | "parallel" | "merge" | "transform" | "trigger" | "output" | "loop" | "errorHandler" | "delay" | "variable" | "calculator" | "filter" | "database" | "jsonParser" | "aggregator" | "randomizer" | "validator";
 
 interface WorkflowNode {
   id: string;
@@ -176,6 +181,10 @@ const WorkflowCanvas = ({ workflow, onUpdate }: { workflow: WorkflowState; onUpd
       transform: RefreshCw,
       trigger: Zap,
       output: Download,
+      ...Object.entries(advancedNodeTypes).reduce((acc, [key, node]) => {
+        acc[node.type] = node.icon;
+        return acc;
+      }, {} as Record<string, any>)
     };
     
     const Icon = nodeIcons[node.type] || Brain;
@@ -209,7 +218,18 @@ const WorkflowCanvas = ({ workflow, onUpdate }: { workflow: WorkflowState; onUpd
             node.type === "parallel" && "bg-green-500/20 text-green-500",
             node.type === "transform" && "bg-yellow-500/20 text-yellow-500",
             node.type === "trigger" && "bg-red-500/20 text-red-500",
-            node.type === "output" && "bg-gray-500/20 text-gray-500"
+            node.type === "output" && "bg-gray-500/20 text-gray-500",
+            node.type === "loop" && "bg-orange-500/20 text-orange-500",
+            node.type === "errorHandler" && "bg-rose-500/20 text-rose-500",
+            node.type === "delay" && "bg-indigo-500/20 text-indigo-500",
+            node.type === "variable" && "bg-teal-500/20 text-teal-500",
+            node.type === "calculator" && "bg-cyan-500/20 text-cyan-500",
+            node.type === "filter" && "bg-amber-500/20 text-amber-500",
+            node.type === "database" && "bg-emerald-500/20 text-emerald-500",
+            node.type === "jsonParser" && "bg-lime-500/20 text-lime-500",
+            node.type === "aggregator" && "bg-violet-500/20 text-violet-500",
+            node.type === "randomizer" && "bg-pink-500/20 text-pink-500",
+            node.type === "validator" && "bg-sky-500/20 text-sky-500"
           )}>
             <Icon className="h-4 w-4" />
           </div>
@@ -354,40 +374,62 @@ const WorkflowCanvas = ({ workflow, onUpdate }: { workflow: WorkflowState; onUpd
 
 // Node palette for drag-and-drop
 const NodePalette = ({ onAddNode }: { onAddNode: (type: NodeType) => void }) => {
-  const nodeTypes: { type: NodeType; icon: any; label: string; description: string }[] = [
-    { type: "agent", icon: Brain, label: "AI Agent", description: "Claude or Codex agent" },
-    { type: "condition", icon: GitBranch, label: "Condition", description: "Conditional branching" },
-    { type: "parallel", icon: Layers, label: "Parallel", description: "Execute in parallel" },
-    { type: "merge", icon: Link, label: "Merge", description: "Merge parallel branches" },
-    { type: "transform", icon: RefreshCw, label: "Transform", description: "Data transformation" },
-    { type: "trigger", icon: Zap, label: "Trigger", description: "Workflow trigger" },
-    { type: "output", icon: Download, label: "Output", description: "Save results" },
+  const basicNodes: { type: NodeType; icon: any; label: string; description: string; category: string }[] = [
+    { type: "agent", icon: Brain, label: "AI Agent", description: "Claude or Codex agent", category: "Core" },
+    { type: "trigger", icon: Zap, label: "Trigger", description: "Workflow trigger", category: "Core" },
+    { type: "output", icon: Download, label: "Output", description: "Save results", category: "Core" },
   ];
+  
+  // Get advanced nodes from imported types
+  const advancedNodesList = Object.entries(advancedNodeTypes).map(([key, node]) => ({
+    type: node.type as NodeType,
+    icon: node.icon,
+    label: node.label,
+    description: node.description,
+    category: node.category
+  }));
+  
+  const allNodes = [...basicNodes, ...advancedNodesList];
+  
+  // Group nodes by category
+  const categories = ["Core", "Control Flow", "Data Processing", "Integration"];
+  const nodesByCategory = categories.reduce((acc, category) => {
+    acc[category] = allNodes.filter(node => node.category === category);
+    return acc;
+  }, {} as Record<string, typeof allNodes>);
 
   return (
-    <div className="w-64 h-full border-r border-border bg-card/50 p-4">
+    <div className="w-64 h-full border-r border-border bg-card/50 p-4 overflow-y-auto">
       <h3 className="font-semibold mb-4">Workflow Nodes</h3>
-      <div className="space-y-2">
-        {nodeTypes.map(({ type, icon: Icon, label, description }) => (
-          <motion.div
-            key={type}
-            className="p-3 rounded-lg border border-border bg-background cursor-pointer hover:border-primary/50 transition-all"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onAddNode(type)}
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-primary/10 text-primary">
-                <Icon className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="font-medium text-sm">{label}</div>
-                <div className="text-xs text-muted-foreground">{description}</div>
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+      
+      {categories.map(category => (
+        <div key={category} className="mb-6">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            {category}
+          </h4>
+          <div className="space-y-2">
+            {nodesByCategory[category]?.map(({ type, icon: Icon, label, description }) => (
+              <motion.div
+                key={type}
+                className="p-3 rounded-lg border border-border bg-background cursor-pointer hover:border-primary/50 transition-all"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onAddNode(type)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-md bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{label}</div>
+                    <div className="text-xs text-muted-foreground">{description}</div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      ))}
       
       <div className="mt-6 p-3 rounded-lg bg-primary/10 border border-primary/20">
         <div className="flex items-center gap-2 mb-2">
@@ -468,27 +510,129 @@ export default function WorkflowBuilder() {
   const handleExecute = async () => {
     setWorkflow(prev => ({ ...prev, executing: true }));
     
-    // Simulate workflow execution
-    const executionSteps = workflow.nodes.length;
-    for (let i = 0; i < executionSteps; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success(`Executed step ${i + 1}/${executionSteps}`);
+    try {
+      // Set up WebSocket for real-time updates first
+      const ws = apiClient.createWebSocket();
+      if (ws) {
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'workflow_update') {
+            toast.info(`Workflow update: ${data.message}`);
+          } else if (data.type === 'agent_result') {
+            toast.success(`Agent ${data.agent}: ${data.status}`);
+          }
+        };
+      }
+      
+      // Execute nodes in order (simple sequential execution for now)
+      const agentNodes = workflow.nodes.filter(n => n.type === "agent");
+      
+      for (const node of agentNodes) {
+        if (!node.data.agent || !node.data.task) {
+          toast.warning(`Skipping node ${node.data.label}: Missing agent or task`);
+          continue;
+        }
+        
+        toast.info(`Executing ${node.data.label}...`);
+        
+        try {
+          let result;
+          switch (node.data.agent) {
+            case "claude":
+              result = await apiClient.analyzeClaude(node.data.task, {
+                nodeId: node.id,
+                workflow: workflow.id
+              });
+              break;
+            case "codex":
+              result = await apiClient.executeCodex(node.data.task, "python");
+              break;
+            case "orchestrator":
+              result = await apiClient.executeOrchestrator(
+                node.data.task,
+                ["claude", "codex"],
+                { nodeId: node.id }
+              );
+              break;
+            case "memory":
+              result = await apiClient.queryMemory(node.data.task);
+              break;
+            case "webscraper":
+              // Extract URL from task or use default
+              const urlMatch = node.data.task.match(/https?:\/\/[^\s]+/);
+              const url = urlMatch ? urlMatch[0] : "";
+              result = await apiClient.scrapeWeb(url);
+              break;
+            case "dataanalyzer":
+              // For demo, analyze sample data
+              result = await apiClient.analyzeData([
+                { name: "Sample", value: 100 },
+                { name: "Demo", value: 200 }
+              ]);
+              break;
+            default:
+              throw new Error(`Unknown agent type: ${node.data.agent}`);
+          }
+          
+          toast.success(`${node.data.label} completed successfully!`);
+          console.log(`Result for ${node.data.label}:`, result);
+          
+        } catch (nodeError) {
+          toast.error(`Failed to execute ${node.data.label}: ${(nodeError as Error).message}`);
+        }
+      }
+      
+      // Save workflow execution history
+      const saveData = {
+        ...workflow,
+        name: `Workflow ${new Date().toLocaleDateString()}`,
+        id: workflow.id || `workflow_${Date.now()}`,
+        executedAt: new Date().toISOString()
+      };
+      
+      await apiClient.saveWorkflow(saveData);
+      toast.success("Workflow execution completed!");
+      
+    } catch (error) {
+      toast.error("Failed to execute workflow: " + (error as Error).message);
+    } finally {
+      setWorkflow(prev => ({ ...prev, executing: false }));
     }
-    
-    setWorkflow(prev => ({ ...prev, executing: false }));
-    toast.success("Workflow execution completed!");
   };
 
-  const handleSave = () => {
-    const workflowData = JSON.stringify(workflow, null, 2);
-    const blob = new Blob([workflowData], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `workflow-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Workflow saved!");
+  const handleSave = async () => {
+    try {
+      const saveData = {
+        ...workflow,
+        name: `Workflow ${new Date().toLocaleDateString()}`,
+        id: `workflow_${Date.now()}`
+      };
+      
+      const data = await apiClient.saveWorkflow(saveData);
+      toast.success(`Workflow saved! ID: ${data.id}`);
+      
+      // Also download as backup
+      const workflowData = JSON.stringify(workflow, null, 2);
+      const blob = new Blob([workflowData], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `workflow-${data.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("Failed to save workflow to server");
+      
+      // Fallback to local download
+      const workflowData = JSON.stringify(workflow, null, 2);
+      const blob = new Blob([workflowData], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `workflow-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const handleLoad = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -641,9 +785,17 @@ export default function WorkflowBuilder() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="absolute top-4 left-4 w-80 p-4 rounded-lg bg-card border border-border shadow-lg"
+              className="absolute top-4 left-4 w-80 p-4 rounded-lg bg-card border border-border shadow-lg max-h-[80vh] overflow-y-auto"
             >
-              <h3 className="font-medium mb-3">Node Properties</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium">Node Properties</h3>
+                <button
+                  onClick={() => setWorkflow(prev => ({ ...prev, selectedNode: null }))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
               <div className="space-y-3">
                 <div>
                   <label className="text-sm text-muted-foreground">Label</label>
@@ -667,13 +819,165 @@ export default function WorkflowBuilder() {
                 {workflow.nodes.find(n => n.id === workflow.selectedNode)?.type === "agent" && (
                   <div>
                     <label className="text-sm text-muted-foreground">Agent</label>
-                    <select className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input">
-                      <option value="claude">Claude</option>
-                      <option value="codex">Codex</option>
-                      <option value="custom">Custom</option>
+                    <select 
+                      className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input"
+                      value={workflow.nodes.find(n => n.id === workflow.selectedNode)?.data.agent || ""}
+                      onChange={(e) => {
+                        setWorkflow(prev => ({
+                          ...prev,
+                          nodes: prev.nodes.map(n =>
+                            n.id === prev.selectedNode
+                              ? { ...n, data: { ...n.data, agent: e.target.value } }
+                              : n
+                          ),
+                        }));
+                      }}
+                    >
+                      <option value="">Select an agent</option>
+                      <option value="claude">Claude (Analysis)</option>
+                      <option value="codex">Codex (Code Generation)</option>
+                      <option value="orchestrator">Orchestrator (Multi-Agent)</option>
+                      <option value="memory">Memory Graph</option>
+                      <option value="webscraper">Web Scraper</option>
+                      <option value="dataanalyzer">Data Analyzer</option>
                     </select>
                   </div>
                 )}
+                
+                {workflow.nodes.find(n => n.id === workflow.selectedNode)?.type === "agent" && (
+                  <div>
+                    <label className="text-sm text-muted-foreground">Task/Prompt</label>
+                    <textarea
+                      className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input"
+                      rows={3}
+                      placeholder="Enter the task or prompt for this agent..."
+                      value={workflow.nodes.find(n => n.id === workflow.selectedNode)?.data.task || ""}
+                      onChange={(e) => {
+                        setWorkflow(prev => ({
+                          ...prev,
+                          nodes: prev.nodes.map(n =>
+                            n.id === prev.selectedNode
+                              ? { ...n, data: { ...n.data, task: e.target.value } }
+                              : n
+                          ),
+                        }));
+                      }}
+                    />
+                  </div>
+                )}
+                
+                {/* Advanced node configuration */}
+                {(() => {
+                  const selectedNode = workflow.nodes.find(n => n.id === workflow.selectedNode);
+                  if (!selectedNode) return null;
+                  
+                  const nodeTypeConfig = advancedNodeTypes[selectedNode.type];
+                  if (!nodeTypeConfig || !nodeTypeConfig.configFields) return null;
+                  
+                  return (
+                    <>
+                      <div className="border-t border-border my-3" />
+                      <h4 className="text-sm font-medium mb-2">Configuration</h4>
+                      {nodeTypeConfig.configFields.map((field) => (
+                        <div key={field.name} className="mb-3">
+                          <label className="text-sm text-muted-foreground">{field.label}</label>
+                          {field.type === "select" ? (
+                            <select
+                              className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input"
+                              value={selectedNode.data[field.name] || field.defaultValue}
+                              onChange={(e) => {
+                                setWorkflow(prev => ({
+                                  ...prev,
+                                  nodes: prev.nodes.map(n =>
+                                    n.id === prev.selectedNode
+                                      ? { ...n, data: { ...n.data, [field.name]: e.target.value } }
+                                      : n
+                                  ),
+                                }));
+                              }}
+                            >
+                              {field.options?.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : field.type === "boolean" ? (
+                            <label className="flex items-center gap-2 mt-1">
+                              <input
+                                type="checkbox"
+                                checked={selectedNode.data[field.name] || field.defaultValue}
+                                onChange={(e) => {
+                                  setWorkflow(prev => ({
+                                    ...prev,
+                                    nodes: prev.nodes.map(n =>
+                                      n.id === prev.selectedNode
+                                        ? { ...n, data: { ...n.data, [field.name]: e.target.checked } }
+                                        : n
+                                    ),
+                                  }));
+                                }}
+                                className="rounded border-input"
+                              />
+                              <span className="text-sm">Enable</span>
+                            </label>
+                          ) : field.type === "number" ? (
+                            <input
+                              type="number"
+                              className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input"
+                              value={selectedNode.data[field.name] || field.defaultValue}
+                              placeholder={field.placeholder}
+                              onChange={(e) => {
+                                setWorkflow(prev => ({
+                                  ...prev,
+                                  nodes: prev.nodes.map(n =>
+                                    n.id === prev.selectedNode
+                                      ? { ...n, data: { ...n.data, [field.name]: parseInt(e.target.value) } }
+                                      : n
+                                  ),
+                                }));
+                              }}
+                            />
+                          ) : field.type === "code" || field.type === "json" ? (
+                            <textarea
+                              className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input font-mono text-xs"
+                              rows={3}
+                              value={selectedNode.data[field.name] || ""}
+                              placeholder={field.placeholder}
+                              onChange={(e) => {
+                                setWorkflow(prev => ({
+                                  ...prev,
+                                  nodes: prev.nodes.map(n =>
+                                    n.id === prev.selectedNode
+                                      ? { ...n, data: { ...n.data, [field.name]: e.target.value } }
+                                      : n
+                                  ),
+                                }));
+                              }}
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              className="w-full mt-1 px-3 py-2 rounded-md bg-background border border-input"
+                              value={selectedNode.data[field.name] || ""}
+                              placeholder={field.placeholder}
+                              onChange={(e) => {
+                                setWorkflow(prev => ({
+                                  ...prev,
+                                  nodes: prev.nodes.map(n =>
+                                    n.id === prev.selectedNode
+                                      ? { ...n, data: { ...n.data, [field.name]: e.target.value } }
+                                      : n
+                                  ),
+                                }));
+                              }}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
             </motion.div>
           )}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -40,6 +41,20 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <Providers>
           {children}
+          <Toaster 
+            position="top-right"
+            richColors
+            closeButton
+            toastOptions={{
+              style: {
+                background: '#1f2937',
+                color: '#f3f4f6',
+                border: '1px solid #374151',
+              },
+              className: 'god-tier-toast',
+              duration: 4000,
+            }}
+          />
         </Providers>
       </body>
     </html>
